@@ -175,11 +175,14 @@
             font-size: clamp(14px, 7vmin, 56px);
             font-weight: 600;
             color: var(--text-color);
-            white-space: nowrap;
+            display: -webkit-box;
+            -webkit-box-orient: vertical;
+            -webkit-line-clamp: 2;
             overflow: hidden;
-            text-overflow: ellipsis;
             max-width: 80%;
             line-height: 1.25;
+            text-align: center;
+            word-break: break-word;
             text-shadow: 0 1px 8px rgba(0,0,0,1.0);
         }
 
@@ -187,11 +190,14 @@
             font-family: 'OpenSans', sans-serif;
             font-size: clamp(11px, 5.5vmin, 44px);
             color: color-mix(in srgb, var(--text-color) 72%, transparent);
-            white-space: nowrap;
+            display: -webkit-box;
+            -webkit-box-orient: vertical;
+            -webkit-line-clamp: 2;
             overflow: hidden;
-            text-overflow: ellipsis;
             max-width: 80%;
             line-height: 1.25;
+            text-align: center;
+            word-break: break-word;
             text-shadow: 0 1px 8px rgba(0,0,0,1.0);
         }
     </style>
