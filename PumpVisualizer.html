@@ -1,0 +1,841 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>tr('Pump Visualizer')</title>
+
+    <!-- iCUE Widget Metadata -->
+    <meta name="x-icue-widget-group" content="tr('Entertainment')">
+    <meta name="x-icue-widget-preview" content="resources/PumpVisualizerPreview.png">
+    <meta name="x-icue-restrictions"
+        data-restrictions='[{"device":"pump_lcd"}]'>
+
+    <!-- Properties -->
+    <meta name="x-icue-property" content="vizMode"
+        data-label="tr('Layout Mode')" data-type="tab-buttons"
+        data-values="[{'key':'mode1','value':tr('Mode 1')},{'key':'mode2','value':tr('Mode 2')}]"
+        data-default="'mode1'">
+    <meta name="x-icue-property" content="vizStyle"
+        data-label="tr('Visualizer Style')" data-type="tab-buttons"
+        data-values="[{'key':'bars','value':tr('Bars')},{'key':'wave','value':tr('Wave')},{'key':'rings','value':tr('Rings')}]"
+        data-default="'bars'">
+    <meta name="x-icue-property" content="barCount"
+        data-label="tr('Bar Count')" data-type="slider"
+        data-default="64" data-min="16" data-max="128" data-step="8">
+    <meta name="x-icue-property" content="sensitivity"
+        data-label="tr('Sensitivity')" data-type="slider"
+        data-default="50" data-min="10" data-max="100" data-step="5">
+    <meta name="x-icue-property" content="smoothing"
+        data-label="tr('Smoothing')" data-type="slider"
+        data-default="50" data-min="0" data-max="90" data-step="5">
+    <meta name="x-icue-property" content="spatialBlur"
+        data-label="tr('Cohesion')" data-type="slider"
+        data-default="30" data-min="0" data-max="100" data-step="5">
+    <meta name="x-icue-property" content="showArt"
+        data-label="tr('Show Album Art')" data-type="switch" data-default="true">
+    <meta name="x-icue-property" content="artOpacity"
+        data-label="tr('Art Opacity')" data-type="slider"
+        data-default="100" data-min="0" data-max="100" data-step="5">
+    <meta name="x-icue-property" content="vizOpacity"
+        data-label="tr('Visualizer Opacity')" data-type="slider"
+        data-default="100" data-min="0" data-max="100" data-step="5">
+    <meta name="x-icue-property" content="showMediaInfo"
+        data-label="tr('Show Media Info')" data-type="switch" data-default="true">
+    <meta name="x-icue-property" content="serverPort"
+        data-label="tr('Server Port')" data-type="textfield" data-default="'16329'">
+    <meta name="x-icue-property" content="accentColor"
+        data-label="tr('Accent Color')" data-type="color" data-default="'#1DB954'">
+    <meta name="x-icue-property" content="backgroundColor"
+        data-label="tr('Background Color')" data-type="color" data-default="'#0A0A0A'">
+    <meta name="x-icue-property" content="textColor"
+        data-label="tr('Text Color')" data-type="color" data-default="'#FFFFFF'">
+
+    <!-- Property Groups -->
+    <script type="application/json" id="x-icue-groups">
+    [
+        {
+            "title": "tr('Pump Visualizer')",
+            "properties": ["vizMode", "vizStyle", "barCount", "sensitivity", "smoothing", "spatialBlur", "showArt", "artOpacity", "vizOpacity", "showMediaInfo", "serverPort"]
+        },
+        {
+            "title": "tr('Appearance')",
+            "properties": ["accentColor", "backgroundColor", "textColor"]
+        }
+    ]
+    </script>
+
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --accent-color: #1DB954;
+            --bg-color: #0A0A0A;
+            --text-color: #ffffff;
+        }
+
+        @font-face {
+            font-family: 'OpenSans';
+            src: url('qrc:/fonts/OpenSans-Regular.ttf');
+        }
+
+        body {
+            background: transparent;
+            overflow: hidden;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        .pump-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: var(--bg-color);
+        }
+
+        /* Canvas covers full widget, drawn over the art */
+        #pump-canvas {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 2;
+        }
+
+        /* Album art: centered circle, positioned by JS */
+        .pump-art-wrap {
+            position: absolute;
+            border-radius: 50%;
+            overflow: hidden;
+            z-index: 1;
+            background: rgba(255, 255, 255, 0.05);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .pump-art {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: none;
+        }
+
+        .pump-art-placeholder {
+            font-family: 'OpenSans', sans-serif;
+            font-size: 8vmin;
+            opacity: 0.25;
+            line-height: 1;
+        }
+
+        /* Disconnected overlay */
+        .pump-offline { display: none; }
+
+        .pump-disconnected .pump-offline {
+            display: flex;
+            position: absolute;
+            inset: 0;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+        }
+
+        .pump-offline-msg {
+            font-family: 'OpenSans', sans-serif;
+            font-size: 3vmin;
+            color: rgba(255, 255, 255, 0.4);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+
+        .pump-disconnected .pump-art-wrap {
+            opacity: 0.3;
+        }
+
+        /* Media info overlay */
+        .pump-media {
+            position: absolute;
+            z-index: 3;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5vmin;
+            pointer-events: none;
+            background: radial-gradient(ellipse at center, rgba(0,0,0,0.68) 0%, transparent 72%);
+            border-radius: 50%;
+        }
+
+        .pump-title {
+            font-family: 'OpenSans', sans-serif;
+            font-size: clamp(14px, 7vmin, 56px);
+            font-weight: 600;
+            color: var(--text-color);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 80%;
+            line-height: 1.25;
+            text-shadow: 0 1px 8px rgba(0,0,0,1.0);
+        }
+
+        .pump-artist {
+            font-family: 'OpenSans', sans-serif;
+            font-size: clamp(11px, 5.5vmin, 44px);
+            color: color-mix(in srgb, var(--text-color) 72%, transparent);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 80%;
+            line-height: 1.25;
+            text-shadow: 0 1px 8px rgba(0,0,0,1.0);
+        }
+    </style>
+</head>
+<body>
+    <div class="pump-container" id="pump-container">
+        <div class="pump-offline">
+            <span class="pump-offline-msg">Server offline</span>
+        </div>
+        <canvas id="pump-canvas"></canvas>
+        <div class="pump-art-wrap" id="pump-art-wrap">
+            <img class="pump-art" id="pump-art" alt="">
+            <span class="pump-art-placeholder" id="pump-art-placeholder">&#9835;</span>
+        </div>
+        <div class="pump-media" id="pump-media" style="display:none">
+            <div class="pump-title" id="pump-title"></div>
+            <div class="pump-artist" id="pump-artist"></div>
+        </div>
+    </div>
+
+    <script src="tools/ColorTools.js"></script>
+    <script>
+        // ══════════════════════════════════════════════════════════════
+        // Config
+        // ══════════════════════════════════════════════════════════════
+        var cfg = {
+            vizMode: 'mode1',
+            vizStyle: 'bars',
+            barCount: 64,
+            sensitivity: 50,
+            smoothing: 50,
+            spatialBlur: 30,
+            showArt: true,
+            artOpacity: 100,
+            vizOpacity: 100,
+            showMediaInfo: true,
+            serverPort: '16329',
+            accentColor: '#1DB954',
+            backgroundColor: '#0A0A0A',
+            textColor: '#FFFFFF'
+        };
+
+        // ── Runtime state ──
+        var rawBins = [];
+        var bassBins = [];
+        var bassSampleRate = 4000;
+        var mainBassSmoothed = 0;
+        var displayBins = [];
+        var ws = null;
+        var reconnectTimer = null;
+        var connectedPort = null;
+        var animFrameId = null;
+        var hasLiveData = false;
+        var idlePhase = 0;
+        var cachedArtUrl = '';
+        var serverSampleRate = 48000;
+        var mediaTitle = '';
+        var mediaArtist = '';
+
+        // ── DOM refs ──
+        var container = document.getElementById('pump-container');
+        var canvas = document.getElementById('pump-canvas');
+        var ctx = canvas.getContext('2d');
+        var artImg = document.getElementById('pump-art');
+        var artPlaceholder = document.getElementById('pump-art-placeholder');
+        var artWrap = document.getElementById('pump-art-wrap');
+        var mediaDiv = document.getElementById('pump-media');
+        var titleEl = document.getElementById('pump-title');
+        var artistEl = document.getElementById('pump-artist');
+
+        // ══════════════════════════════════════════════════════════════
+        // Settings
+        // ══════════════════════════════════════════════════════════════
+        function readSettings() {
+            if (typeof vizMode !== 'undefined')          cfg.vizMode = vizMode;
+            if (typeof vizStyle !== 'undefined')         cfg.vizStyle = vizStyle;
+            if (typeof barCount !== 'undefined')         cfg.barCount = Number(barCount) || 64;
+            if (typeof sensitivity !== 'undefined')      cfg.sensitivity = Number(sensitivity) || 50;
+            if (typeof smoothing !== 'undefined')        cfg.smoothing = Number(smoothing) || 50;
+            if (typeof spatialBlur !== 'undefined')      cfg.spatialBlur = Number(spatialBlur);
+            if (typeof showArt !== 'undefined')          cfg.showArt = !!showArt;
+            if (typeof artOpacity !== 'undefined')       cfg.artOpacity = Number(artOpacity);
+            if (typeof vizOpacity !== 'undefined')       cfg.vizOpacity = Number(vizOpacity);
+            if (typeof showMediaInfo !== 'undefined')    cfg.showMediaInfo = !!showMediaInfo;
+            if (typeof serverPort !== 'undefined')       cfg.serverPort = String(serverPort).trim() || '16329';
+            if (typeof accentColor !== 'undefined')      cfg.accentColor = accentColor;
+            if (typeof backgroundColor !== 'undefined')  cfg.backgroundColor = backgroundColor;
+            if (typeof textColor !== 'undefined')        cfg.textColor = textColor;
+        }
+
+        function applyTheme() {
+            var root = document.documentElement;
+            root.style.setProperty('--accent-color', cfg.accentColor);
+            root.style.setProperty('--bg-color', cfg.backgroundColor);
+            root.style.setProperty('--text-color', cfg.textColor);
+        }
+
+        // ══════════════════════════════════════════════════════════════
+        // WebSocket
+        // ══════════════════════════════════════════════════════════════
+        function connectWS() {
+            var port = cfg.serverPort;
+            if (ws && connectedPort === port && ws.readyState <= 1) return;
+            if (ws) { try { ws.close(); } catch(e) {} }
+            clearTimeout(reconnectTimer);
+
+            try {
+                ws = new WebSocket('ws://localhost:' + port);
+            } catch(e) {
+                scheduleReconnect();
+                return;
+            }
+
+            ws.onopen = function() {
+                connectedPort = port;
+                container.classList.remove('pump-disconnected');
+            };
+
+            ws.onmessage = function(ev) {
+                try {
+                    var msg = JSON.parse(ev.data);
+                    if (msg.type === 'art') {
+                        cachedArtUrl = msg.artUrl || '';
+                        if (cachedArtUrl) {
+                            artImg.src = cachedArtUrl;
+                            artImg.style.display = 'block';
+                            artPlaceholder.style.display = 'none';
+                        } else {
+                            artImg.style.display = 'none';
+                            artPlaceholder.style.display = '';
+                        }
+                        return;
+                    }
+                    if (msg.fft)           { rawBins = msg.fft; hasLiveData = true; }
+                    if (msg.bassFFT)       bassBins = msg.bassFFT;
+                    if (msg.bassSampleRate) bassSampleRate = msg.bassSampleRate;
+                    if (msg.sampleRate)    serverSampleRate = msg.sampleRate;
+                    if (msg.media) {
+                        mediaTitle  = msg.media.title  || '';
+                        mediaArtist = msg.media.artist || '';
+                        titleEl.textContent  = mediaTitle;
+                        artistEl.textContent = mediaArtist;
+                    }
+                } catch(e) {}
+            };
+
+            ws.onclose = function() {
+                container.classList.add('pump-disconnected');
+                hasLiveData = false;
+                scheduleReconnect();
+            };
+
+            ws.onerror = function() {
+                container.classList.add('pump-disconnected');
+                hasLiveData = false;
+            };
+        }
+
+        function scheduleReconnect() {
+            clearTimeout(reconnectTimer);
+            reconnectTimer = setTimeout(connectWS, 2000);
+        }
+
+        // ══════════════════════════════════════════════════════════════
+        // Audio pipeline (identical to NowPlaying)
+        // ══════════════════════════════════════════════════════════════
+        function generateIdleBins(count) {
+            idlePhase += 0.02;
+            var bins = [];
+            for (var i = 0; i < count; i++) {
+                var t = idlePhase + i * 0.4;
+                var val = 0.20 + 0.15 * Math.sin(t * 1.1)
+                        + 0.10 * Math.sin(t * 2.3 + 1.0)
+                        + 0.06 * Math.sin(t * 3.7 + 2.0);
+                bins.push(Math.max(0, Math.min(1, val)));
+            }
+            return bins;
+        }
+
+        function processedBins() {
+            var sens = Math.pow(cfg.sensitivity / 50, 2);
+            var lerpFactor = 1 - cfg.smoothing / 100;
+            var count = cfg.barCount;
+            if (count < 1) count = 1;
+
+            var isSilent = true;
+            if (hasLiveData && rawBins.length > 0) {
+                for (var k = 0; k < rawBins.length; k++) {
+                    if (rawBins[k] > 0.01) { isSilent = false; break; }
+                }
+            }
+
+            var resampled;
+
+            if (hasLiveData && !isSilent) {
+                var n = rawBins.length;
+                var fftSize = Math.max(1, (n - 1) * 2);
+                var hzPerBin = serverSampleRate / fftSize;
+
+                var hasBass = bassBins.length > 0;
+                var bassN = bassBins.length;
+                var bassHzPerBin = hasBass ? bassSampleRate / Math.max(1, (bassN - 1) * 2) : 1;
+                var bassMaxFreq = hasBass ? bassSampleRate / 2 : 0;
+
+                var decades = [
+                    { lo: 10,    hi: 100   },
+                    { lo: 100,   hi: 1000  },
+                    { lo: 1000,  hi: 10000 },
+                    { lo: 10000, hi: 20000 }
+                ];
+
+                var totalLogSpan = 0;
+                for (var di = 0; di < decades.length; di++) {
+                    decades[di].logSpan = Math.log10(decades[di].hi / decades[di].lo);
+                    totalLogSpan += decades[di].logSpan;
+                }
+
+                var barsRemaining = count;
+                for (var di = 0; di < decades.length; di++) {
+                    if (di < decades.length - 1) {
+                        decades[di].bars = Math.round(count * decades[di].logSpan / totalLogSpan);
+                        barsRemaining -= decades[di].bars;
+                    } else {
+                        decades[di].bars = barsRemaining;
+                    }
+                }
+
+                var bassEnvelope = 1.0;
+                if (hasBass) {
+                    var bassEndBin = Math.min(n - 1, Math.ceil(bassMaxFreq / hzPerBin));
+                    var mainBassNow = 0;
+                    for (var ei = 0; ei <= bassEndBin; ei++) mainBassNow += rawBins[ei];
+                    mainBassNow /= Math.max(1, bassEndBin + 1);
+                    mainBassSmoothed = mainBassSmoothed * 0.93 + mainBassNow * 0.07;
+                    bassEnvelope = mainBassSmoothed > 0.001
+                        ? Math.min(3.0, Math.max(0.0, mainBassNow / mainBassSmoothed))
+                        : 1.0;
+                }
+
+                resampled = [];
+                for (var di = 0; di < decades.length; di++) {
+                    var dec = decades[di];
+                    for (var bi = 0; bi < dec.bars; bi++) {
+                        var t = dec.bars > 1 ? (bi + 0.5) / dec.bars : 0.5;
+                        var barFreq = dec.lo * Math.pow(dec.hi / dec.lo, t);
+                        var useBass = hasBass && barFreq < bassMaxFreq;
+                        var srcBins = useBass ? bassBins : rawBins;
+                        var srcN    = useBass ? bassN    : n;
+                        var srcHz   = useBass ? bassHzPerBin : hzPerBin;
+                        var binIdx  = barFreq / srcHz;
+                        var lo = Math.max(0, Math.floor(binIdx));
+                        var hi = Math.min(srcN - 1, lo + 1);
+                        var frac = binIdx - Math.floor(binIdx);
+                        var val = srcBins[lo] * (1 - frac) + srcBins[hi] * frac;
+                        if (useBass) val *= bassEnvelope;
+                        resampled.push(Math.min(1, val * sens));
+                    }
+                }
+            } else {
+                resampled = generateIdleBins(count);
+            }
+
+            // dB scaling
+            var dbFloor = -45;
+            for (var ci = 0; ci < resampled.length; ci++) {
+                var v = resampled[ci];
+                resampled[ci] = v > 0 ? Math.max(0, (20 * Math.log10(v) - dbFloor) / -dbFloor) : 0;
+            }
+
+            // Spatial blur
+            var blurAmt = cfg.spatialBlur / 100;
+            if (blurAmt > 0) {
+                var blurPasses = Math.round(1 + blurAmt * 4);
+                var blurLen = resampled.length;
+                for (var pass = 0; pass < blurPasses; pass++) {
+                    var blurred = [];
+                    for (var bi = 0; bi < blurLen; bi++) {
+                        var bt = blurLen > 1 ? bi / (blurLen - 1) : 0;
+                        var nwMax = 0.10 + blurAmt * 0.20;
+                        var nwMin = blurAmt * 0.05;
+                        var nw = nwMax - bt * (nwMax - nwMin);
+                        var cw = 1.0 - 2 * nw;
+                        var prev = bi > 0 ? resampled[bi - 1] : resampled[bi];
+                        var next = bi < blurLen - 1 ? resampled[bi + 1] : resampled[bi];
+                        blurred.push(prev * nw + resampled[bi] * cw + next * nw);
+                    }
+                    resampled = blurred;
+                }
+            }
+
+            // Temporal smoothing
+            while (displayBins.length < resampled.length) displayBins.push(0);
+            while (displayBins.length > resampled.length) displayBins.pop();
+            for (var si = 0; si < resampled.length; si++) {
+                displayBins[si] += (resampled[si] - displayBins[si]) * lerpFactor;
+            }
+
+            return displayBins;
+        }
+
+        function getAccentRGB() {
+            var ac = cfg.accentColor;
+            if (typeof hexToRGB === 'function' && typeof ac === 'string' && ac.charAt(0) === '#') {
+                return hexToRGB(ac);
+            }
+            return '29, 185, 84';
+        }
+
+        // ══════════════════════════════════════════════════════════════
+        // Circular renderers
+        // ══════════════════════════════════════════════════════════════
+
+        function renderRadialBars(bins, cx, cy, innerR, outerR) {
+            var rgb = getAccentRGB();
+            var n = bins.length;
+            if (n < 1) return;
+
+            var maxH = outerR - innerR;
+            var arcStep = (2 * Math.PI) / n;
+            // Bar width = 75% of arc spacing at innerR
+            var barW = Math.max(1.5, (2 * Math.PI * innerR / n) * 0.75);
+
+            for (var i = 0; i < n; i++) {
+                var barH = bins[i] * maxH;
+                if (barH < 0.5) continue;
+
+                ctx.save();
+                ctx.translate(cx, cy);
+                ctx.rotate(i * arcStep - Math.PI / 2);
+
+                var grad = ctx.createLinearGradient(innerR, 0, innerR + barH, 0);
+                grad.addColorStop(0, 'rgba(' + rgb + ', 0.35)');
+                grad.addColorStop(1, 'rgba(' + rgb + ', 1.00)');
+                ctx.fillStyle = grad;
+                ctx.fillRect(innerR, -barW / 2, barH, barW);
+
+                // Glowing tip
+                if (bins[i] > 0.25) {
+                    var tipW = Math.max(1, barH * 0.05);
+                    ctx.shadowColor = 'rgba(' + rgb + ', 0.6)';
+                    ctx.shadowBlur = barW;
+                    ctx.fillStyle = 'rgba(' + rgb + ', 1.0)';
+                    ctx.fillRect(innerR + barH - tipW, -barW / 2, tipW, barW);
+                    ctx.shadowBlur = 0;
+                }
+
+                ctx.restore();
+            }
+        }
+
+        function renderRadialWave(bins, cx, cy, innerR, outerR) {
+            var rgb = getAccentRGB();
+            var n = bins.length;
+            if (n < 2) return;
+
+            var maxAmp = outerR - innerR;
+
+            function polar(i) {
+                var angle = (i / n) * 2 * Math.PI - Math.PI / 2;
+                var r = innerR + bins[i % n] * maxAmp;
+                return { x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle) };
+            }
+
+            // Smooth closed curve using midpoints between consecutive points
+            ctx.beginPath();
+            var pPrev = polar(n - 1);
+            var p0 = polar(0);
+            ctx.moveTo((pPrev.x + p0.x) / 2, (pPrev.y + p0.y) / 2);
+            for (var i = 0; i < n; i++) {
+                var p = polar(i);
+                var pNext = polar((i + 1) % n);
+                ctx.quadraticCurveTo(p.x, p.y, (p.x + pNext.x) / 2, (p.y + pNext.y) / 2);
+            }
+            ctx.closePath();
+
+            // Radial fill between inner ring and wave
+            var fill = ctx.createRadialGradient(cx, cy, innerR * 0.85, cx, cy, outerR);
+            fill.addColorStop(0, 'rgba(' + rgb + ', 0.10)');
+            fill.addColorStop(1, 'rgba(' + rgb + ', 0.55)');
+            ctx.fillStyle = fill;
+            ctx.fill();
+
+            // Stroke
+            ctx.strokeStyle = 'rgba(' + rgb + ', 0.85)';
+            ctx.lineWidth = Math.max(1, Math.min(cx, cy) * 0.008);
+            ctx.stroke();
+
+            // Subtle baseline ring at innerR
+            ctx.beginPath();
+            ctx.arc(cx, cy, innerR, 0, Math.PI * 2);
+            ctx.strokeStyle = 'rgba(' + rgb + ', 0.15)';
+            ctx.lineWidth = Math.max(1, Math.min(cx, cy) * 0.003);
+            ctx.stroke();
+        }
+
+        function renderRadialRings(bins, cx, cy, innerR, outerR) {
+            var rgb = getAccentRGB();
+            var n = bins.length;
+            if (n < 1) return;
+
+            var span = outerR - innerR;
+            var ringSpacing = span / n;
+
+            for (var i = 0; i < n; i++) {
+                var r = innerR + (i + 0.5) * ringSpacing + bins[i] * ringSpacing * 0.4;
+                var alpha = 0.15 + bins[i] * 0.85;
+                ctx.beginPath();
+                ctx.arc(cx, cy, r, 0, Math.PI * 2);
+                ctx.strokeStyle = 'rgba(' + rgb + ', ' + alpha.toFixed(2) + ')';
+                ctx.lineWidth = Math.max(1, ringSpacing * 0.28 * (0.3 + bins[i] * 0.7));
+                ctx.stroke();
+            }
+        }
+
+        // ══════════════════════════════════════════════════════════════
+        // Mode 2 renderers — art fills viewport, visualizer comes inward
+        // ══════════════════════════════════════════════════════════════
+
+        function renderRadialBarsInward(bins, cx, cy, outerR) {
+            var rgb = getAccentRGB();
+            var n = bins.length;
+            if (n < 1) return;
+
+            // Bars can extend up to 35% of the display radius inward
+            var maxH = outerR * 0.35;
+            var arcStep = (2 * Math.PI) / n;
+            var barW = Math.max(1.5, (2 * Math.PI * outerR / n) * 0.75);
+
+            for (var i = 0; i < n; i++) {
+                var barH = bins[i] * maxH;
+                if (barH < 0.5) continue;
+
+                ctx.save();
+                ctx.translate(cx, cy);
+                ctx.rotate(i * arcStep - Math.PI / 2);
+
+                // Bar runs from (outerR - barH) outward to outerR
+                var grad = ctx.createLinearGradient(outerR - barH, 0, outerR, 0);
+                grad.addColorStop(0, 'rgba(' + rgb + ', 0.20)');
+                grad.addColorStop(1, 'rgba(' + rgb + ', 1.00)');
+                ctx.fillStyle = grad;
+                ctx.fillRect(outerR - barH, -barW / 2, barH, barW);
+
+                // Glowing inner tip
+                if (bins[i] > 0.25) {
+                    var tipW = Math.max(1, barH * 0.05);
+                    ctx.shadowColor = 'rgba(' + rgb + ', 0.6)';
+                    ctx.shadowBlur = barW;
+                    ctx.fillStyle = 'rgba(' + rgb + ', 1.0)';
+                    ctx.fillRect(outerR - barH, -barW / 2, tipW, barW);
+                    ctx.shadowBlur = 0;
+                }
+
+                ctx.restore();
+            }
+        }
+
+        function renderRadialWaveInward(bins, cx, cy, outerR) {
+            var rgb = getAccentRGB();
+            var n = bins.length;
+            if (n < 2) return;
+
+            var maxAmp = outerR * 0.35;
+
+            function polar(i) {
+                var angle = (i / n) * 2 * Math.PI - Math.PI / 2;
+                var r = outerR - bins[i % n] * maxAmp;
+                return { x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle) };
+            }
+
+            // Smooth closed curve
+            ctx.beginPath();
+            var pPrev = polar(n - 1);
+            var p0 = polar(0);
+            ctx.moveTo((pPrev.x + p0.x) / 2, (pPrev.y + p0.y) / 2);
+            for (var i = 0; i < n; i++) {
+                var p = polar(i);
+                var pNext = polar((i + 1) % n);
+                ctx.quadraticCurveTo(p.x, p.y, (p.x + pNext.x) / 2, (p.y + pNext.y) / 2);
+            }
+            ctx.closePath();
+
+            // Fill between wave and outer edge (clip to outer circle first)
+            ctx.save();
+            var outerClip = new Path2D();
+            outerClip.arc(cx, cy, outerR, 0, Math.PI * 2);
+            ctx.clip(outerClip);
+
+            var fill = ctx.createRadialGradient(cx, cy, outerR * 0.6, cx, cy, outerR);
+            fill.addColorStop(0, 'rgba(' + rgb + ', 0.10)');
+            fill.addColorStop(1, 'rgba(' + rgb + ', 0.55)');
+            ctx.fillStyle = fill;
+            ctx.fill();
+            ctx.restore();
+
+            // Stroke
+            ctx.strokeStyle = 'rgba(' + rgb + ', 0.85)';
+            ctx.lineWidth = Math.max(1, outerR * 0.008);
+            ctx.stroke();
+        }
+
+        function renderRadialRingsFull(bins, cx, cy, outerR) {
+            var rgb = getAccentRGB();
+            var n = bins.length;
+            if (n < 1) return;
+
+            // Rings span from center to outerR
+            var ringSpacing = outerR / n;
+
+            for (var i = 0; i < n; i++) {
+                var r = (i + 0.5) * ringSpacing + bins[i] * ringSpacing * 0.4;
+                var alpha = 0.15 + bins[i] * 0.85;
+                ctx.beginPath();
+                ctx.arc(cx, cy, r, 0, Math.PI * 2);
+                ctx.strokeStyle = 'rgba(' + rgb + ', ' + alpha.toFixed(2) + ')';
+                ctx.lineWidth = Math.max(1, ringSpacing * 0.28 * (0.3 + bins[i] * 0.7));
+                ctx.stroke();
+            }
+        }
+
+        // ══════════════════════════════════════════════════════════════
+        // Main render loop
+        // ══════════════════════════════════════════════════════════════
+        function render() {
+            var w = container.offsetWidth;
+            var h = container.offsetHeight;
+
+            if (w > 0 && h > 0) {
+                var dpr = window.devicePixelRatio || 1;
+                canvas.width  = w * dpr;
+                canvas.height = h * dpr;
+                ctx.scale(dpr, dpr);
+                ctx.clearRect(0, 0, w, h);
+                canvas.style.opacity = cfg.vizOpacity / 100;
+
+                var cx = w / 2;
+                var cy = h / 2;
+                var minDim = Math.min(w, h);
+
+                // outerR: 48% of minDim → inscribed circle with ~2% margin
+                var outerR = minDim * 0.48;
+
+                var bins = processedBins();
+                var style = cfg.vizStyle;
+
+                if (cfg.vizMode === 'mode2') {
+                    // ── Mode 2: art fills viewport, visualizer comes inward ──
+                    artWrap.style.width       = w + 'px';
+                    artWrap.style.height      = h + 'px';
+                    artWrap.style.left        = '0px';
+                    artWrap.style.top         = '0px';
+                    artWrap.style.borderRadius = '50%';
+                    artWrap.style.opacity = cfg.artOpacity / 100;
+                    artWrap.style.display = cfg.showArt ? '' : 'none';
+
+                    if (bins.length > 0) {
+                        if (style === 'wave') {
+                            renderRadialWaveInward(bins, cx, cy, outerR);
+                        } else if (style === 'rings') {
+                            renderRadialRingsFull(bins, cx, cy, outerR);
+                        } else {
+                            renderRadialBarsInward(bins, cx, cy, outerR);
+                        }
+                    }
+
+                    // Media info — centered on circular display
+                    if (cfg.showMediaInfo) {
+                        mediaDiv.style.width  = (outerR * 2) + 'px';
+                        mediaDiv.style.height = (outerR * 2) + 'px';
+                        mediaDiv.style.left   = (cx - outerR) + 'px';
+                        mediaDiv.style.top    = (cy - outerR) + 'px';
+                        mediaDiv.style.display = '';
+                    } else {
+                        mediaDiv.style.display = 'none';
+                    }
+                } else {
+                    // ── Mode 1: art centered, visualizer radiates outward ──
+                    var innerR = outerR * 0.75;
+                    var artR   = innerR * 0.93;
+
+                    artWrap.style.width       = (artR * 2) + 'px';
+                    artWrap.style.height      = (artR * 2) + 'px';
+                    artWrap.style.left        = (cx - artR) + 'px';
+                    artWrap.style.top         = (cy - artR) + 'px';
+                    artWrap.style.borderRadius = '50%';
+                    artWrap.style.opacity = cfg.artOpacity / 100;
+                    artWrap.style.display = cfg.showArt ? '' : 'none';
+
+                    if (bins.length > 0) {
+                        if (style === 'wave') {
+                            renderRadialWave(bins, cx, cy, innerR, outerR);
+                        } else if (style === 'rings') {
+                            var ringInner = cfg.showArt ? artR : outerR * 0.15;
+                            renderRadialRings(bins, cx, cy, ringInner, outerR);
+                        } else {
+                            renderRadialBars(bins, cx, cy, innerR, outerR);
+                        }
+                    }
+
+                    // Media info — centered on art circle
+                    if (cfg.showMediaInfo) {
+                        mediaDiv.style.width  = (artR * 2) + 'px';
+                        mediaDiv.style.height = (artR * 2) + 'px';
+                        mediaDiv.style.left   = (cx - artR) + 'px';
+                        mediaDiv.style.top    = (cy - artR) + 'px';
+                        mediaDiv.style.display = '';
+                    } else {
+                        mediaDiv.style.display = 'none';
+                    }
+                }
+            }
+
+            animFrameId = requestAnimationFrame(render);
+        }
+
+        // ══════════════════════════════════════════════════════════════
+        // iCUE Integration
+        // ══════════════════════════════════════════════════════════════
+        function onIcueInitialized() {
+            readSettings();
+            applyTheme();
+            connectWS();
+            if (!animFrameId) render();
+        }
+
+        function onDataUpdated() {
+            readSettings();
+            applyTheme();
+            if (cfg.serverPort !== connectedPort) connectWS();
+        }
+
+        icueEvents = {
+            "onICUEInitialized": onIcueInitialized,
+            "onDataUpdated": onDataUpdated
+        };
+
+        if (typeof iCUE_initialized !== 'undefined' && iCUE_initialized) {
+            onIcueInitialized();
+        } else if (typeof iCUE_initialized === 'undefined') {
+            window.addEventListener('DOMContentLoaded', function() {
+                container.classList.add('pump-disconnected');
+                connectWS();
+                render();
+            });
+        }
+    </script>
+</body>
+</html>
