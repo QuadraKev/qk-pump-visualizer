@@ -1,6 +1,7 @@
 {
     "en": {},
     "de": {
+        "QK Pump Visualizer": "QK Pump Visualizer",
         "Pump Visualizer": "Pumpen-Visualisierer",
         "Appearance": "Erscheinungsbild",
         "Layout Mode": "Layoutmodus",
@@ -25,6 +26,7 @@
         "Text Color": "Textfarbe"
     },
     "es": {
+        "QK Pump Visualizer": "QK Pump Visualizer",
         "Pump Visualizer": "Visualizador de Bomba",
         "Appearance": "Apariencia",
         "Layout Mode": "Modo de Diseño",
@@ -49,6 +51,7 @@
         "Text Color": "Color de Texto"
     },
     "fr": {
+        "QK Pump Visualizer": "QK Pump Visualizer",
         "Pump Visualizer": "Visualiseur de Pompe",
         "Appearance": "Apparence",
         "Layout Mode": "Mode de Disposition",
@@ -73,6 +76,7 @@
         "Text Color": "Couleur du Texte"
     },
     "it": {
+        "QK Pump Visualizer": "QK Pump Visualizer",
         "Pump Visualizer": "Visualizzatore Pompa",
         "Appearance": "Aspetto",
         "Layout Mode": "Modalità Layout",
@@ -97,6 +101,7 @@
         "Text Color": "Colore del Testo"
     },
     "ja": {
+        "QK Pump Visualizer": "QK Pump Visualizer",
         "Pump Visualizer": "ポンプビジュアライザー",
         "Appearance": "外観",
         "Layout Mode": "レイアウトモード",
@@ -121,6 +126,7 @@
         "Text Color": "テキストカラー"
     },
     "ko": {
+        "QK Pump Visualizer": "QK Pump Visualizer",
         "Pump Visualizer": "펌프 시각화",
         "Appearance": "외관",
         "Layout Mode": "레이아웃 모드",
@@ -145,6 +151,7 @@
         "Text Color": "텍스트 색상"
     },
     "pt": {
+        "QK Pump Visualizer": "QK Pump Visualizer",
         "Pump Visualizer": "Visualizador de Bomba",
         "Appearance": "Aparência",
         "Layout Mode": "Modo de Layout",
@@ -169,6 +176,7 @@
         "Text Color": "Cor do Texto"
     },
     "ru": {
+        "QK Pump Visualizer": "QK Pump Visualizer",
         "Pump Visualizer": "Визуализатор помпы",
         "Appearance": "Внешний вид",
         "Layout Mode": "Режим компоновки",
@@ -193,6 +201,7 @@
         "Text Color": "Цвет текста"
     },
     "zh_CN": {
+        "QK Pump Visualizer": "QK Pump Visualizer",
         "Pump Visualizer": "泵头可视化",
         "Appearance": "外观",
         "Layout Mode": "布局模式",
@@ -217,6 +226,7 @@
         "Text Color": "文字颜色"
     },
     "zh_TW": {
+        "QK Pump Visualizer": "QK Pump Visualizer",
         "Pump Visualizer": "泵頭視覺化",
         "Appearance": "外觀",
         "Layout Mode": "版面模式",
@@ -241,6 +251,7 @@
         "Text Color": "文字顏色"
     },
     "uk": {
+        "QK Pump Visualizer": "QK Pump Visualizer",
         "Pump Visualizer": "Візуалізатор помпи",
         "Appearance": "Зовнішній вигляд",
         "Layout Mode": "Режим компонування",
