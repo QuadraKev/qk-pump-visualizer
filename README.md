@@ -8,8 +8,8 @@ A circular audio visualizer widget for the **Corsair iCUE Dashboard**, designed 
 
 The widget has two components:
 
-- **`PumpVisualizer.html`** — the iCUE widget itself, rendered on the pump LCD
-- **`server/NowPlayingServer.py`** — the companion Python server (shared with the [NowPlaying widget](https://github.com/QuadraKev/media-visualizer)), which captures system audio and media metadata and pushes it to the widget over WebSocket
+- **`QKPumpVisualizer.html`** — the iCUE widget itself, rendered on the pump LCD
+- **`server/NowPlayingServer.py`** — the companion Python server (shared with the [QK XE Visualizer](https://github.com/QuadraKev/qk-xe-visualizer)), which captures system audio and media metadata and pushes it to the widget over WebSocket
 
 The server captures system audio via **WASAPI loopback** and computes a dual-resolution FFT spectrum (standard FFT for treble, downsampled high-resolution bass FFT for frequencies below 2kHz). Track info is read from **Windows SMTC** — the same source used by the Windows volume overlay. Data is pushed to the widget at up to 60fps.
 
@@ -38,7 +38,7 @@ The server captures system audio via **WASAPI loopback** and computes a dual-res
 pip install PyAudioWPatch numpy websockets winrt-runtime winrt-Windows.Media.Control winrt-Windows.Storage.Streams
 ```
 
-**2. Run the server** (from the NowPlaying companion server):
+**2. Run the server:**
 ```
 python server/NowPlayingServer.py
 ```
@@ -101,7 +101,7 @@ Both modes show track title and artist text centered on the display, with a radi
 
 ## Companion Server
 
-This widget uses the same Python server as the [NowPlaying media visualizer](https://github.com/QuadraKev/media-visualizer). See that project for full server documentation, including:
+This widget uses the same Python server as the [QK XE Visualizer](https://github.com/QuadraKev/qk-xe-visualizer). See that project for full server documentation, including:
 
 - Audio pipeline details (WASAPI loopback, dual-resolution FFT)
 - SMTC media info integration
