@@ -43,7 +43,7 @@ pip install PyAudioWPatch numpy websockets winrt-runtime winrt-Windows.Media.Con
 python server/NowPlayingServer.py
 ```
 
-By default it listens on port `16329`. You can change this with `--port`:
+By default, it listens on port `16329`. You can change this with `--port`:
 ```
 python server/NowPlayingServer.py --port 16329 --fps 60
 ```
@@ -115,7 +115,7 @@ This widget uses the same Python server as the [QK XE Visualizer](https://github
 
 **"Server offline" shown in widget**
 - Make sure `NowPlayingServer.py` is running
-- Check the Server Port setting matches the `--port` argument
+- Check that the Server Port setting matches the `--port` argument
 
 **No audio visualization**
 - Ensure something is actually playing audio
