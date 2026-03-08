@@ -1,6 +1,6 @@
 # Corsair Pump LCD Visualizer - iCUE Dashboard Widget
 
-A circular audio visualizer widget for the **Corsair iCUE Dashboard**, designed specifically for pump LCD displays. Displays a real-time audio spectrum in a radial layout around (or over) album artwork, with track title and artist shown in the center.
+The QuadraKev Pump (QK Pump) Visualizer is a circular audio visualizer widget for the **Corsair iCUE Dashboard**, designed specifically for pump LCD displays. Displays a real-time audio spectrum in a radial layout around (or over) album artwork, with track title and artist shown in the center.
 
 ---
 
@@ -18,13 +18,18 @@ The server captures system audio via **WASAPI loopback** and computes a dual-res
 ## Requirements
 
 ### Widget
-- Corsair iCUE with Dashboard LCD support
+
+- Corsair iCUE (built and tested on 5.41.42)
 - A Corsair device with a pump LCD
 
 ### Server
+
 - Windows 10/11
+
 - Python 3.10+
+
 - Dependencies:
+
   ```
   pip install PyAudioWPatch numpy websockets winrt-runtime winrt-Windows.Media.Control winrt-Windows.Storage.Streams
   ```
@@ -34,22 +39,32 @@ The server captures system audio via **WASAPI loopback** and computes a dual-res
 ## Setup
 
 **1. Install server dependencies:**
+
 ```
 pip install PyAudioWPatch numpy websockets winrt-runtime winrt-Windows.Media.Control winrt-Windows.Storage.Streams
 ```
 
 **2. Run the server:**
+
 ```
-python server/NowPlayingServer.py
+python NowPlayingServer.py
 ```
 
+The server is shared with the [QK XE Visualizer](https://github.com/QuadraKev/qk-xe-visualizer). A single instance serves both widgets, so there is no need to run it twice.
+
 By default, it listens on port `16329`. You can change this with `--port`:
+
 ```
-python server/NowPlayingServer.py --port 16329 --fps 60
+python NowPlayingServer.py --port 16329 --fps 60
 ```
 
 **3. Install the widget in iCUE:**
+
 - Copy the project folder into your iCUE widgets directory
+  - Typically `C:\Program Files\Corsair\Corsair iCUE5 Software\widgets`
+  - `QKPumpVisualizer.html`, `QKPumpVisualizer_translation.json` should be added to `\widgets`
+  - `images\qk-pump-visualizer.svg` should be added to the `widgets\images` folder
+  - `server\NowPlayingServer.py` can be placed anywhere
 - Add the widget to your pump LCD device in iCUE
 
 **4. Configure the widget** in iCUE settings. Set the Server Port to match what the server is using (default: `16329`).
