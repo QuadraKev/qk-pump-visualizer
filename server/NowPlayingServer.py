@@ -18,6 +18,7 @@ Endpoints (single port):
 import argparse
 import asyncio
 import base64
+import collections
 import json
 import logging
 import math
@@ -54,6 +55,7 @@ class AudioCapture:
 
     BASS_TARGET_RATE = 4000  # Downsample target for bass FFT
     BASS_CHUNK = 1024        # FFT size for bass (gives ~3.9 Hz/bin at 4kHz)
+    PEAK_WINDOW_SECS = 10    # Rolling peak window duration
 
     def __init__(self):
         self._lock = threading.Lock()
@@ -67,6 +69,9 @@ class AudioCapture:
         self._bass_rate = self.BASS_TARGET_RATE
         self._bass_accum = np.array([], dtype=np.float32)
         self._decimate_factor = 1
+        # Rolling peak window for normalization
+        self._peak_history = collections.deque()
+        self._bass_peak_history = collections.deque()
 
     @property
     def spectrum(self):
@@ -91,6 +96,11 @@ class AudioCapture:
         self._running = True
         t = threading.Thread(target=self._capture_loop, daemon=True)
         t.start()
+
+    def reset_peaks(self):
+        """Clear rolling peak history (call on track change)."""
+        self._peak_history.clear()
+        self._bass_peak_history.clear()
 
     def stop(self):
         self._running = False
@@ -192,10 +202,18 @@ class AudioCapture:
             window = hanning * ramp
             spectrum = np.abs(np.fft.rfft(samples * window))
 
-            # Per-frame normalization (0.0 – 1.0)
-            peak = spectrum.max() if len(spectrum) > 0 else 1.0
-            if peak > 0:
-                spectrum = spectrum / peak
+            # Rolling-window normalization: track peaks over the last N
+            # seconds and normalize against the max, so the visualizer
+            # adapts slowly to volume changes instead of per-frame.
+            now = time.monotonic()
+            frame_peak = spectrum.max() if len(spectrum) > 0 else 0.0
+            self._peak_history.append((now, frame_peak))
+            cutoff = now - self.PEAK_WINDOW_SECS
+            while self._peak_history and self._peak_history[0][0] < cutoff:
+                self._peak_history.popleft()
+            rolling_peak = max(p for _, p in self._peak_history) if self._peak_history else 1.0
+            if rolling_peak > 0:
+                spectrum = spectrum / rolling_peak
 
             with self._lock:
                 self._spectrum = np.round(spectrum, 4).tolist()
@@ -223,9 +241,15 @@ class AudioCapture:
                 ramp = np.exp(np.linspace(-8, 0, self.BASS_CHUNK))
                 bass_window = hanning * ramp
                 bass_fft = np.abs(np.fft.rfft(bass_decimated * bass_window))
-                bass_peak = bass_fft.max() if len(bass_fft) > 0 else 1.0
-                if bass_peak > 0:
-                    bass_fft = bass_fft / bass_peak
+                bass_frame_peak = bass_fft.max() if len(bass_fft) > 0 else 0.0
+                now_bass = time.monotonic()
+                self._bass_peak_history.append((now_bass, bass_frame_peak))
+                cutoff_bass = now_bass - self.PEAK_WINDOW_SECS
+                while self._bass_peak_history and self._bass_peak_history[0][0] < cutoff_bass:
+                    self._bass_peak_history.popleft()
+                bass_rolling_peak = max(p for _, p in self._bass_peak_history) if self._bass_peak_history else 1.0
+                if bass_rolling_peak > 0:
+                    bass_fft = bass_fft / bass_rolling_peak
 
                 with self._lock:
                     self._bass_spectrum = np.round(bass_fft, 4).tolist()
@@ -247,6 +271,7 @@ class MediaInfo:
         self._art_bytes = b""
         self._art_data_url = ""
         self._art_version = 0  # increments on each art change
+        self._track_changed = False  # set when title changes
         self._last_title = ""
         self._available = False
         self._poll_count = 0
@@ -274,6 +299,14 @@ class MediaInfo:
             )
         except Exception as e:
             log.warning(f"SMTC: Unexpected import error: {type(e).__name__}: {e}")
+
+    def consume_track_changed(self):
+        """Return True if track changed since last call, and reset the flag."""
+        with self._lock:
+            if self._track_changed:
+                self._track_changed = False
+                return True
+            return False
 
     @property
     def data(self):
@@ -442,6 +475,8 @@ class MediaInfo:
                 else:
                     self._clear_art()
                 self._last_title = title
+                with self._lock:
+                    self._track_changed = True
 
             with self._lock:
                 self._title = title
@@ -630,6 +665,11 @@ class NowPlayingServer:
         last_art_version = self.media.art_version
         while True:
             await self.media.poll()
+            # Reset rolling peak history on track change so the
+            # visualizer adapts quickly to the new track's levels
+            if self.media.consume_track_changed():
+                self.audio.reset_peaks()
+                log.info("Rolling peak history reset (track changed)")
             # Check if art changed since last poll
             current_art_version = self.media.art_version
             if current_art_version != last_art_version and self._clients:
