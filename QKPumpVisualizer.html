@@ -96,13 +96,13 @@
             background-color: var(--bg-color);
         }
 
-        /* Canvas covers full widget, drawn over the art */
+        /* Canvas covers full widget */
         #pump-canvas {
             position: absolute;
             top: 0; left: 0;
             width: 100%;
             height: 100%;
-            z-index: 2;
+            z-index: 3;
         }
 
         /* Album art: centered circle, positioned by JS */
@@ -110,7 +110,7 @@
             position: absolute;
             border-radius: 50%;
             overflow: hidden;
-            z-index: 1;
+            z-index: 0;
             background: rgba(255, 255, 255, 0.05);
             display: flex;
             align-items: center;
@@ -155,18 +155,42 @@
             opacity: 0.3;
         }
 
+        /* Mode 2 overlays — only visible in mode2 */
+        .pump-art-dim {
+            position: absolute;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 50%;
+            z-index: 1;
+            display: none;
+            pointer-events: none;
+        }
+
+        .pump-text-gradient {
+            position: absolute;
+            border-radius: 50%;
+            background: radial-gradient(ellipse at center, rgba(0,0,0,0.68) 0%, transparent 72%);
+            z-index: 4;
+            display: none;
+            pointer-events: none;
+        }
+
         /* Media info overlay */
         .pump-media {
             position: absolute;
-            z-index: 3;
+            z-index: 5;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
             gap: 0.5vmin;
             pointer-events: none;
-            background: radial-gradient(ellipse at center, rgba(0,0,0,0.68) 0%, transparent 72%);
             border-radius: 50%;
+        }
+
+        /* Mode 1: media has its own gradient background */
+        .pump-media-gradient {
+            background: radial-gradient(ellipse at center, rgba(0,0,0,0.68) 0%, transparent 72%);
         }
 
         .pump-title {
@@ -206,12 +230,14 @@
         <div class="pump-offline">
             <span class="pump-offline-msg">Server offline</span>
         </div>
-        <canvas id="pump-canvas"></canvas>
         <div class="pump-art-wrap" id="pump-art-wrap">
             <img class="pump-art" id="pump-art" alt="">
             <span class="pump-art-placeholder" id="pump-art-placeholder">&#9835;</span>
         </div>
-        <div class="pump-media" id="pump-media" style="display:none">
+        <div class="pump-art-dim" id="pump-art-dim"></div>
+        <canvas id="pump-canvas"></canvas>
+        <div class="pump-text-gradient" id="pump-text-gradient"></div>
+        <div class="pump-media pump-media-gradient" id="pump-media" style="display:none">
             <div class="pump-title" id="pump-title"></div>
             <div class="pump-artist" id="pump-artist"></div>
         </div>
@@ -265,6 +291,8 @@
         var artImg = document.getElementById('pump-art');
         var artPlaceholder = document.getElementById('pump-art-placeholder');
         var artWrap = document.getElementById('pump-art-wrap');
+        var artDim = document.getElementById('pump-art-dim');
+        var textGradient = document.getElementById('pump-text-gradient');
         var mediaDiv = document.getElementById('pump-media');
         var titleEl = document.getElementById('pump-title');
         var artistEl = document.getElementById('pump-artist');
@@ -755,6 +783,7 @@
 
                 if (cfg.vizMode === 'mode2') {
                     // ── Mode 2: art fills viewport, visualizer comes inward ──
+                    // Layer order: art → dim overlay → visualizer → text gradient → text
                     artWrap.style.width       = w + 'px';
                     artWrap.style.height      = h + 'px';
                     artWrap.style.left        = '0px';
@@ -762,6 +791,9 @@
                     artWrap.style.borderRadius = '50%';
                     artWrap.style.opacity = cfg.artOpacity / 100;
                     artWrap.style.display = cfg.showArt ? '' : 'none';
+
+                    // Flat dark overlay between art and visualizer
+                    artDim.style.display = cfg.showArt ? '' : 'none';
 
                     if (bins.length > 0) {
                         if (style === 'wave') {
@@ -773,7 +805,19 @@
                         }
                     }
 
-                    // Media info — centered on circular display
+                    // Radial gradient overlay between visualizer and text
+                    if (cfg.showMediaInfo) {
+                        textGradient.style.width  = (outerR * 2) + 'px';
+                        textGradient.style.height = (outerR * 2) + 'px';
+                        textGradient.style.left   = (cx - outerR) + 'px';
+                        textGradient.style.top    = (cy - outerR) + 'px';
+                        textGradient.style.display = '';
+                    } else {
+                        textGradient.style.display = 'none';
+                    }
+
+                    // Media info — centered, no own gradient (separate layer handles it)
+                    mediaDiv.classList.remove('pump-media-gradient');
                     if (cfg.showMediaInfo) {
                         mediaDiv.style.width  = (outerR * 2) + 'px';
                         mediaDiv.style.height = (outerR * 2) + 'px';
@@ -785,6 +829,10 @@
                     }
                 } else {
                     // ── Mode 1: art centered, visualizer radiates outward ──
+                    artDim.style.display = 'none';
+                    textGradient.style.display = 'none';
+                    mediaDiv.classList.add('pump-media-gradient');
+
                     var innerR = outerR * 0.75;
                     var artR   = innerR * 0.93;
 
