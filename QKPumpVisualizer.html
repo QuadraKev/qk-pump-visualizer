@@ -159,7 +159,7 @@
         .pump-art-dim {
             position: absolute;
             inset: 0;
-            background: rgba(0, 0, 0, 0.4);
+            background: rgba(0, 0, 0, 1);
             border-radius: 50%;
             z-index: 1;
             display: none;
@@ -793,7 +793,7 @@
                     artWrap.style.display = cfg.showArt ? '' : 'none';
 
                     // Flat dark overlay between art and visualizer
-                    artDim.style.display = cfg.showArt ? '' : 'none';
+                    artDim.style.display = cfg.showArt ? 'block' : 'none';
 
                     if (bins.length > 0) {
                         if (style === 'wave') {
@@ -811,7 +811,7 @@
                         textGradient.style.height = (outerR * 2) + 'px';
                         textGradient.style.left   = (cx - outerR) + 'px';
                         textGradient.style.top    = (cy - outerR) + 'px';
-                        textGradient.style.display = '';
+                        textGradient.style.display = 'block';
                     } else {
                         textGradient.style.display = 'none';
                     }
