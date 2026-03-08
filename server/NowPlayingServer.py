@@ -21,8 +21,6 @@ import base64
 import collections
 import json
 import logging
-import math
-import sys
 import threading
 import time
 from http import HTTPStatus
@@ -45,6 +43,16 @@ logging.basicConfig(
     datefmt="%H:%M:%S",
 )
 log = logging.getLogger("NowPlaying")
+
+
+def _detect_image_type(data):
+    """Detect image content type from magic bytes."""
+    if data[:3] == b"\xff\xd8\xff":
+        return "image/jpeg"
+    if data[:4] == b"RIFF":
+        return "image/webp"
+    return "image/png"
+
 
 # ---------------------------------------------------------------------------
 # Audio capture (WASAPI loopback via PyAudioWPatch)
@@ -69,6 +77,9 @@ class AudioCapture:
         self._bass_rate = self.BASS_TARGET_RATE
         self._bass_accum = np.array([], dtype=np.float32)
         self._decimate_factor = 1
+        # Precomputed windows (set in _run_capture once chunk size is known)
+        self._main_window = None
+        self._bass_window = np.hanning(self.BASS_CHUNK)
         # Rolling peak window for normalization
         self._peak_history = collections.deque()
         self._bass_peak_history = collections.deque()
@@ -175,6 +186,11 @@ class AudioCapture:
             f"~{self._bass_rate / self.BASS_CHUNK:.1f} Hz/bin)"
         )
 
+        # Precompute main FFT window (Hanning × exponential ramp)
+        hanning = np.hanning(self._chunk)
+        ramp = np.exp(np.linspace(-8, 0, self._chunk))
+        self._main_window = hanning * ramp
+
         self._stream = self._pa.open(
             format=pyaudio.paInt16,
             channels=channels,
@@ -196,11 +212,9 @@ class AudioCapture:
             if channels >= 2:
                 samples = samples.reshape(-1, channels).mean(axis=1)
 
-            # Asymmetric window: Hanning × exponential ramp, same as bass FFT
-            hanning = np.hanning(len(samples))
-            ramp = np.exp(np.linspace(-8, 0, len(samples)))
-            window = hanning * ramp
-            spectrum = np.abs(np.fft.rfft(samples * window))
+            # Asymmetric window: Hanning × exponential ramp for fast
+            # temporal response (recency-biased)
+            spectrum = np.abs(np.fft.rfft(samples * self._main_window))
 
             # Rolling-window normalization: track peaks over the last N
             # seconds and normalize against the max, so the visualizer
@@ -237,8 +251,7 @@ class AudioCapture:
                 # Pure Hanning window for tight frequency peaks. Temporal
                 # responsiveness comes from the main FFT's bassEnvelope
                 # multiplier on the widget side, so no ramp needed here.
-                bass_window = np.hanning(self.BASS_CHUNK)
-                bass_fft = np.abs(np.fft.rfft(bass_decimated * bass_window))
+                bass_fft = np.abs(np.fft.rfft(bass_decimated * self._bass_window))
                 bass_frame_peak = bass_fft.max() if len(bass_fft) > 0 else 0.0
                 now_bass = time.monotonic()
                 self._bass_peak_history.append((now_bass, bass_frame_peak))
@@ -272,9 +285,7 @@ class MediaInfo:
         self._track_changed = False  # set when title changes
         self._last_title = ""
         self._available = False
-        self._poll_count = 0
         self._error_count = 0
-        self._last_error = ""
         self._smtc_module = False
         self._SessionManager = None
         self._PlaybackStatus = None
@@ -333,11 +344,7 @@ class MediaInfo:
 
     def _update_art(self, art_bytes):
         """Store new art bytes and compute base64 data URL."""
-        content_type = "image/png"
-        if art_bytes[:3] == b"\xff\xd8\xff":
-            content_type = "image/jpeg"
-        elif art_bytes[:4] == b"RIFF":
-            content_type = "image/webp"
+        content_type = _detect_image_type(art_bytes)
         data_url = f"data:{content_type};base64,{base64.b64encode(art_bytes).decode()}"
         with self._lock:
             self._art_bytes = art_bytes
@@ -409,8 +416,6 @@ class MediaInfo:
         """Poll SMTC for current media info. Call periodically (~1s)."""
         if not self._smtc_module:
             return
-
-        self._poll_count += 1
 
         try:
             manager = await asyncio.wait_for(
@@ -490,7 +495,6 @@ class MediaInfo:
             if self._error_count > 0:
                 log.info(f"SMTC: Recovered after {self._error_count} errors")
                 self._error_count = 0
-                self._last_error = ""
 
         except asyncio.TimeoutError:
             self._error_count += 1
@@ -499,7 +503,6 @@ class MediaInfo:
                     f"SMTC: Poll timed out ({self._error_count}x) — "
                     f"winrt async call hung for >5s"
                 )
-            self._last_error = "timeout"
 
         except Exception as e:
             self._error_count += 1
@@ -512,7 +515,6 @@ class MediaInfo:
                 if self._error_count == 1:
                     import traceback
                     traceback.print_exc()
-            self._last_error = err_msg
 
 
 # ---------------------------------------------------------------------------
@@ -545,12 +547,7 @@ class NowPlayingServer:
             return None
 
         art = self.media.art_bytes
-        content_type = "image/png"
-        if art:
-            if art[:3] == b"\xff\xd8\xff":
-                content_type = "image/jpeg"
-            elif art[:4] == b"RIFF":
-                content_type = "image/webp"
+        content_type = _detect_image_type(art) if art else "image/png"
 
         if _ws_new_api:
             # websockets 13+: return Response object
