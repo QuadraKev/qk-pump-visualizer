@@ -664,12 +664,13 @@
             var ringSpacing = span / n;
 
             for (var i = 0; i < n; i++) {
-                var r = innerR + (i + 0.5) * ringSpacing + bins[i] * ringSpacing * 0.4;
-                var alpha = 0.15 + bins[i] * 0.85;
+                var bi = n - 1 - i; // bass on outside, treble on inside
+                var r = innerR + (i + 0.5) * ringSpacing + bins[bi] * ringSpacing * 0.4;
+                var alpha = 0.15 + bins[bi] * 0.85;
                 ctx.beginPath();
                 ctx.arc(cx, cy, r, 0, Math.PI * 2);
                 ctx.strokeStyle = 'rgba(' + rgb + ', ' + alpha.toFixed(2) + ')';
-                ctx.lineWidth = Math.max(1, ringSpacing * 0.28 * (0.3 + bins[i] * 0.7));
+                ctx.lineWidth = Math.max(1, ringSpacing * 0.28 * (0.3 + bins[bi] * 0.7));
                 ctx.stroke();
             }
         }
@@ -786,14 +787,15 @@
             // Rings span from center to outerR
             var ringSpacing = outerR / n;
 
-            var alphaFloor = 0.35;
+            var alphaFloor = 0.15;
             for (var i = 0; i < n; i++) {
-                var r = (i + 0.5) * ringSpacing + bins[i] * ringSpacing * 0.4;
-                var alpha = alphaFloor + bins[i] * (1.0 - alphaFloor);
+                var bi = n - 1 - i; // bass on outside, treble on inside
+                var r = (i + 0.5) * ringSpacing + bins[bi] * ringSpacing * 0.4;
+                var alpha = alphaFloor + bins[bi] * (1.0 - alphaFloor);
                 ctx.beginPath();
                 ctx.arc(cx, cy, r, 0, Math.PI * 2);
                 ctx.strokeStyle = 'rgba(' + rgb + ', ' + alpha.toFixed(2) + ')';
-                ctx.lineWidth = Math.max(1, ringSpacing * 0.28 * (0.3 + bins[i] * 0.7));
+                ctx.lineWidth = Math.max(1, ringSpacing * 0.28 * (0.3 + bins[bi] * 0.7));
                 ctx.stroke();
             }
         }
