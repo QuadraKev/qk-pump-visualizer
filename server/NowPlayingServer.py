@@ -192,10 +192,10 @@ class AudioCapture:
             window = hanning * ramp
             spectrum = np.abs(np.fft.rfft(samples * window))
 
-            # Per-frame normalization (0.0 – 1.0)
-            peak = spectrum.max() if len(spectrum) > 0 else 1.0
-            if peak > 0:
-                spectrum = spectrum / peak
+            # Fixed-reference normalization: scale against theoretical max
+            # for a full-scale int16 signal through this windowed FFT
+            ref = 32768.0 * np.sum(window)
+            spectrum = np.clip(spectrum / ref, 0.0, 1.0)
 
             with self._lock:
                 self._spectrum = np.round(spectrum, 4).tolist()
@@ -223,9 +223,8 @@ class AudioCapture:
                 ramp = np.exp(np.linspace(-8, 0, self.BASS_CHUNK))
                 bass_window = hanning * ramp
                 bass_fft = np.abs(np.fft.rfft(bass_decimated * bass_window))
-                bass_peak = bass_fft.max() if len(bass_fft) > 0 else 1.0
-                if bass_peak > 0:
-                    bass_fft = bass_fft / bass_peak
+                bass_ref = 32768.0 * np.sum(bass_window)
+                bass_fft = np.clip(bass_fft / bass_ref, 0.0, 1.0)
 
                 with self._lock:
                     self._bass_spectrum = np.round(bass_fft, 4).tolist()

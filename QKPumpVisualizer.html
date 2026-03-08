@@ -25,7 +25,7 @@
         data-default="64" data-min="16" data-max="128" data-step="8">
     <meta name="x-icue-property" content="sensitivity"
         data-label="tr('Sensitivity')" data-type="slider"
-        data-default="50" data-min="10" data-max="100" data-step="5">
+        data-default="75" data-min="10" data-max="400" data-step="5">
     <meta name="x-icue-property" content="smoothing"
         data-label="tr('Smoothing')" data-type="slider"
         data-default="50" data-min="0" data-max="90" data-step="5">
@@ -377,6 +377,9 @@
         }
 
         function processedBins() {
+            // Exponential sensitivity curve: 50 = 1.0×, 100 = 4.0×, 400 = 64.0×.
+            // Wider range needed for absolute-loudness mode where quiet
+            // sources produce small FFT magnitudes.
             var sens = Math.pow(cfg.sensitivity / 50, 2);
             var lerpFactor = 1 - cfg.smoothing / 100;
             var count = cfg.barCount;
@@ -385,7 +388,7 @@
             var isSilent = true;
             if (hasLiveData && rawBins.length > 0) {
                 for (var k = 0; k < rawBins.length; k++) {
-                    if (rawBins[k] > 0.01) { isSilent = false; break; }
+                    if (rawBins[k] > 0.0001) { isSilent = false; break; }
                 }
             }
 
