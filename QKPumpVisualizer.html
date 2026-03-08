@@ -32,6 +32,8 @@
     <meta name="x-icue-property" content="spatialBlur"
         data-label="tr('Cohesion')" data-type="slider"
         data-default="30" data-min="0" data-max="100" data-step="5">
+    <meta name="x-icue-property" content="mirrorMode"
+        data-label="tr('Mirror Mode')" data-type="switch" data-default="false">
     <meta name="x-icue-property" content="showArt"
         data-label="tr('Show Album Art')" data-type="switch" data-default="true">
     <meta name="x-icue-property" content="artOpacity"
@@ -56,7 +58,7 @@
     [
         {
             "title": "tr('QK Pump Visualizer')",
-            "properties": ["vizMode", "vizStyle", "barCount", "sensitivity", "smoothing", "spatialBlur", "showArt", "artOpacity", "vizOpacity", "showMediaInfo", "serverPort"]
+            "properties": ["vizMode", "vizStyle", "barCount", "sensitivity", "smoothing", "spatialBlur", "mirrorMode", "showArt", "artOpacity", "vizOpacity", "showMediaInfo", "serverPort"]
         },
         {
             "title": "tr('Appearance')",
@@ -159,7 +161,7 @@
         .pump-art-dim {
             position: absolute;
             inset: 0;
-            background: rgba(0, 0, 0, 1);
+            background: rgba(0, 0, 0, 0.4);
             border-radius: 50%;
             z-index: 1;
             display: none;
@@ -255,6 +257,7 @@
             sensitivity: 50,
             smoothing: 50,
             spatialBlur: 30,
+            mirrorMode: false,
             showArt: true,
             artOpacity: 100,
             vizOpacity: 100,
@@ -307,6 +310,7 @@
             if (typeof sensitivity !== 'undefined')      cfg.sensitivity = Number(sensitivity) || 50;
             if (typeof smoothing !== 'undefined')        cfg.smoothing = Number(smoothing) || 50;
             if (typeof spatialBlur !== 'undefined')      cfg.spatialBlur = Number(spatialBlur);
+            if (typeof mirrorMode !== 'undefined')       cfg.mirrorMode = !!mirrorMode;
             if (typeof showArt !== 'undefined')          cfg.showArt = !!showArt;
             if (typeof artOpacity !== 'undefined')       cfg.artOpacity = Number(artOpacity);
             if (typeof vizOpacity !== 'undefined')       cfg.vizOpacity = Number(vizOpacity);
@@ -548,31 +552,27 @@
         // Circular renderers
         // ══════════════════════════════════════════════════════════════
 
-        function renderRadialBars(bins, cx, cy, innerR, outerR) {
+        function renderRadialBars(bins, cx, cy, innerR, outerR, mirror) {
             var rgb = getAccentRGB();
             var n = bins.length;
             if (n < 1) return;
 
             var maxH = outerR - innerR;
-            var arcStep = (2 * Math.PI) / n;
-            // Bar width = 75% of arc spacing at innerR
-            var barW = Math.max(1.5, (2 * Math.PI * innerR / n) * 0.75);
+            var arcSpan = mirror ? Math.PI : 2 * Math.PI;
+            var arcStep = arcSpan / n;
+            var barW = Math.max(1.5, (arcSpan * innerR / n) * 0.75);
 
-            for (var i = 0; i < n; i++) {
+            function drawBar(angle, i) {
                 var barH = bins[i] * maxH;
-                if (barH < 0.5) continue;
-
+                if (barH < 0.5) return;
                 ctx.save();
                 ctx.translate(cx, cy);
-                ctx.rotate(i * arcStep - Math.PI / 2);
-
+                ctx.rotate(angle);
                 var grad = ctx.createLinearGradient(innerR, 0, innerR + barH, 0);
                 grad.addColorStop(0, 'rgba(' + rgb + ', 0.35)');
                 grad.addColorStop(1, 'rgba(' + rgb + ', 1.00)');
                 ctx.fillStyle = grad;
                 ctx.fillRect(innerR, -barW / 2, barH, barW);
-
-                // Glowing tip
                 if (bins[i] > 0.25) {
                     var tipW = Math.max(1, barH * 0.05);
                     ctx.shadowColor = 'rgba(' + rgb + ', 0.6)';
@@ -581,32 +581,56 @@
                     ctx.fillRect(innerR + barH - tipW, -barW / 2, tipW, barW);
                     ctx.shadowBlur = 0;
                 }
-
                 ctx.restore();
+            }
+
+            for (var i = 0; i < n; i++) {
+                var angle = i * arcStep - Math.PI / 2;
+                drawBar(angle, i);
+                if (mirror) drawBar(-angle - Math.PI, i);
             }
         }
 
-        function renderRadialWave(bins, cx, cy, innerR, outerR) {
+        function renderRadialWave(bins, cx, cy, innerR, outerR, mirror) {
             var rgb = getAccentRGB();
             var n = bins.length;
             if (n < 2) return;
 
             var maxAmp = outerR - innerR;
 
-            function polar(i) {
-                var angle = (i / n) * 2 * Math.PI - Math.PI / 2;
-                var r = innerR + bins[i % n] * maxAmp;
-                return { x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle) };
+            // Build points array — in mirror mode, right half then left half mirrored
+            var points = [];
+            if (mirror) {
+                // Right half: top to bottom clockwise
+                for (var i = 0; i <= n; i++) {
+                    var angle = (i / n) * Math.PI - Math.PI / 2;
+                    var bi = i < n ? i : n - 1;
+                    var r = innerR + bins[bi] * maxAmp;
+                    points.push({ x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle) });
+                }
+                // Left half: bottom to top (mirror)
+                for (var i = n - 1; i >= 0; i--) {
+                    var angle = -(i / n) * Math.PI - Math.PI / 2;
+                    var r = innerR + bins[i] * maxAmp;
+                    points.push({ x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle) });
+                }
+            } else {
+                for (var i = 0; i < n; i++) {
+                    var angle = (i / n) * 2 * Math.PI - Math.PI / 2;
+                    var r = innerR + bins[i] * maxAmp;
+                    points.push({ x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle) });
+                }
             }
 
-            // Smooth closed curve using midpoints between consecutive points
+            // Smooth closed curve using midpoints
+            var np = points.length;
             ctx.beginPath();
-            var pPrev = polar(n - 1);
-            var p0 = polar(0);
+            var pPrev = points[np - 1];
+            var p0 = points[0];
             ctx.moveTo((pPrev.x + p0.x) / 2, (pPrev.y + p0.y) / 2);
-            for (var i = 0; i < n; i++) {
-                var p = polar(i);
-                var pNext = polar((i + 1) % n);
+            for (var i = 0; i < np; i++) {
+                var p = points[i];
+                var pNext = points[(i + 1) % np];
                 ctx.quadraticCurveTo(p.x, p.y, (p.x + pNext.x) / 2, (p.y + pNext.y) / 2);
             }
             ctx.closePath();
@@ -654,32 +678,27 @@
         // Mode 2 renderers — art fills viewport, visualizer comes inward
         // ══════════════════════════════════════════════════════════════
 
-        function renderRadialBarsInward(bins, cx, cy, outerR) {
+        function renderRadialBarsInward(bins, cx, cy, outerR, mirror) {
             var rgb = getAccentRGB();
             var n = bins.length;
             if (n < 1) return;
 
-            // Bars can extend up to 35% of the display radius inward
             var maxH = outerR * 0.35;
-            var arcStep = (2 * Math.PI) / n;
-            var barW = Math.max(1.5, (2 * Math.PI * outerR / n) * 0.75);
+            var arcSpan = mirror ? Math.PI : 2 * Math.PI;
+            var arcStep = arcSpan / n;
+            var barW = Math.max(1.5, (arcSpan * outerR / n) * 0.75);
 
-            for (var i = 0; i < n; i++) {
+            function drawBar(angle, i) {
                 var barH = bins[i] * maxH;
-                if (barH < 0.5) continue;
-
+                if (barH < 0.5) return;
                 ctx.save();
                 ctx.translate(cx, cy);
-                ctx.rotate(i * arcStep - Math.PI / 2);
-
-                // Bar runs from (outerR - barH) outward to outerR
+                ctx.rotate(angle);
                 var grad = ctx.createLinearGradient(outerR - barH, 0, outerR, 0);
                 grad.addColorStop(0, 'rgba(' + rgb + ', 0.20)');
                 grad.addColorStop(1, 'rgba(' + rgb + ', 1.00)');
                 ctx.fillStyle = grad;
                 ctx.fillRect(outerR - barH, -barW / 2, barH, barW);
-
-                // Glowing inner tip
                 if (bins[i] > 0.25) {
                     var tipW = Math.max(1, barH * 0.05);
                     ctx.shadowColor = 'rgba(' + rgb + ', 0.6)';
@@ -688,32 +707,54 @@
                     ctx.fillRect(outerR - barH, -barW / 2, tipW, barW);
                     ctx.shadowBlur = 0;
                 }
-
                 ctx.restore();
+            }
+
+            for (var i = 0; i < n; i++) {
+                var angle = i * arcStep - Math.PI / 2;
+                drawBar(angle, i);
+                if (mirror) drawBar(-angle - Math.PI, i);
             }
         }
 
-        function renderRadialWaveInward(bins, cx, cy, outerR) {
+        function renderRadialWaveInward(bins, cx, cy, outerR, mirror) {
             var rgb = getAccentRGB();
             var n = bins.length;
             if (n < 2) return;
 
             var maxAmp = outerR * 0.35;
 
-            function polar(i) {
-                var angle = (i / n) * 2 * Math.PI - Math.PI / 2;
-                var r = outerR - bins[i % n] * maxAmp;
-                return { x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle) };
+            // Build points array
+            var points = [];
+            if (mirror) {
+                for (var i = 0; i <= n; i++) {
+                    var angle = (i / n) * Math.PI - Math.PI / 2;
+                    var bi = i < n ? i : n - 1;
+                    var r = outerR - bins[bi] * maxAmp;
+                    points.push({ x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle) });
+                }
+                for (var i = n - 1; i >= 0; i--) {
+                    var angle = -(i / n) * Math.PI - Math.PI / 2;
+                    var r = outerR - bins[i] * maxAmp;
+                    points.push({ x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle) });
+                }
+            } else {
+                for (var i = 0; i < n; i++) {
+                    var angle = (i / n) * 2 * Math.PI - Math.PI / 2;
+                    var r = outerR - bins[i] * maxAmp;
+                    points.push({ x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle) });
+                }
             }
 
             // Smooth closed curve
+            var np = points.length;
             ctx.beginPath();
-            var pPrev = polar(n - 1);
-            var p0 = polar(0);
+            var pPrev = points[np - 1];
+            var p0 = points[0];
             ctx.moveTo((pPrev.x + p0.x) / 2, (pPrev.y + p0.y) / 2);
-            for (var i = 0; i < n; i++) {
-                var p = polar(i);
-                var pNext = polar((i + 1) % n);
+            for (var i = 0; i < np; i++) {
+                var p = points[i];
+                var pNext = points[(i + 1) % np];
                 ctx.quadraticCurveTo(p.x, p.y, (p.x + pNext.x) / 2, (p.y + pNext.y) / 2);
             }
             ctx.closePath();
@@ -797,11 +838,11 @@
 
                     if (bins.length > 0) {
                         if (style === 'wave') {
-                            renderRadialWaveInward(bins, cx, cy, outerR);
+                            renderRadialWaveInward(bins, cx, cy, outerR, cfg.mirrorMode);
                         } else if (style === 'rings') {
                             renderRadialRingsFull(bins, cx, cy, outerR);
                         } else {
-                            renderRadialBarsInward(bins, cx, cy, outerR);
+                            renderRadialBarsInward(bins, cx, cy, outerR, cfg.mirrorMode);
                         }
                     }
 
@@ -846,12 +887,12 @@
 
                     if (bins.length > 0) {
                         if (style === 'wave') {
-                            renderRadialWave(bins, cx, cy, innerR, outerR);
+                            renderRadialWave(bins, cx, cy, innerR, outerR, cfg.mirrorMode);
                         } else if (style === 'rings') {
                             var ringInner = cfg.showArt ? artR : outerR * 0.15;
                             renderRadialRings(bins, cx, cy, ringInner, outerR);
                         } else {
-                            renderRadialBars(bins, cx, cy, innerR, outerR);
+                            renderRadialBars(bins, cx, cy, innerR, outerR, cfg.mirrorMode);
                         }
                     }
 
