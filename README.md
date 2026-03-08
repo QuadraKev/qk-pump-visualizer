@@ -66,6 +66,7 @@ python NowPlayingServer.py --port 16329 --fps 60
   - `images\qk-pump-visualizer.svg` should be added to the `widgets\images` folder
   - `server\NowPlayingServer.py` can be placed anywhere
 - Add the widget to your pump LCD device in iCUE
+- Restart iCUE for the new widget to appear in the widget picker
 
 **4. Configure the widget** in iCUE settings. Set the Server Port to match what the server is using (default: `16329`).
 
