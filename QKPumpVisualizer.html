@@ -382,10 +382,13 @@
             var count = cfg.barCount;
             if (count < 1) count = 1;
 
+            // Detect silence — with rolling-window normalization, quiet
+            // passages relative to a recent loud peak can produce small
+            // but nonzero values, so use a low threshold
             var isSilent = true;
             if (hasLiveData && rawBins.length > 0) {
                 for (var k = 0; k < rawBins.length; k++) {
-                    if (rawBins[k] > 0.01) { isSilent = false; break; }
+                    if (rawBins[k] > 0.0001) { isSilent = false; break; }
                 }
             }
 
