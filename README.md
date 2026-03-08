@@ -38,6 +38,8 @@ The server captures system audio via **WASAPI loopback** and computes a dual-res
 
 ## Setup
 
+Download the widget files from the [Releases](https://github.com/QuadraKev/qk-pump-visualizer/releases) page, or clone the repository.
+
 **1. Install server dependencies:**
 
 ```
