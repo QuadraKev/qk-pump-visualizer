@@ -379,7 +379,8 @@
         }
 
         function processedBins() {
-            var sens = Math.pow(cfg.sensitivity / 50, 2);
+            // Exponential sensitivity curve: 50 = 3.0×, 10 ≈ 1.25×, 100 = 9.0×.
+            var sens = Math.pow(3, cfg.sensitivity / 50);
             var lerpFactor = 1 - cfg.smoothing / 100;
             var count = cfg.barCount;
             if (count < 1) count = 1;
