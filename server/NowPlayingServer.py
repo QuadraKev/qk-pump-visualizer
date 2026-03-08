@@ -234,12 +234,10 @@ class AudioCapture:
                     self.BASS_CHUNK, df
                 ).mean(axis=1)
 
-                # Asymmetric window: Hanning × exponential ramp that weights
-                # recent samples ~7x more than oldest. Same freq resolution
-                # but biases toward "right now" for faster temporal response.
-                hanning = np.hanning(self.BASS_CHUNK)
-                ramp = np.exp(np.linspace(-8, 0, self.BASS_CHUNK))
-                bass_window = hanning * ramp
+                # Pure Hanning window for tight frequency peaks. Temporal
+                # responsiveness comes from the main FFT's bassEnvelope
+                # multiplier on the widget side, so no ramp needed here.
+                bass_window = np.hanning(self.BASS_CHUNK)
                 bass_fft = np.abs(np.fft.rfft(bass_decimated * bass_window))
                 bass_frame_peak = bass_fft.max() if len(bass_fft) > 0 else 0.0
                 now_bass = time.monotonic()
