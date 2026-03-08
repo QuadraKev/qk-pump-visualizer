@@ -251,6 +251,8 @@
         var animFrameId = null;
         var hasLiveData = false;
         var idlePhase = 0;
+        var silenceSince = 0;  // timestamp when silence started (0 = not silent)
+        var SILENCE_HOLDOFF = 10;  // seconds of silence before idle kicks in
         var cachedArtUrl = '';
         var serverSampleRate = 48000;
         var mediaTitle = '';
@@ -382,15 +384,21 @@
             var count = cfg.barCount;
             if (count < 1) count = 1;
 
-            // Detect silence — with rolling-window normalization, quiet
-            // passages relative to a recent loud peak can produce small
-            // but nonzero values, so use a low threshold
-            var isSilent = true;
+            // Detect silence with holdoff — require continuous silence for
+            // SILENCE_HOLDOFF seconds before switching to idle animation
+            var frameIsSilent = true;
             if (hasLiveData && rawBins.length > 0) {
                 for (var k = 0; k < rawBins.length; k++) {
-                    if (rawBins[k] > 0.0001) { isSilent = false; break; }
+                    if (rawBins[k] > 0.0001) { frameIsSilent = false; break; }
                 }
             }
+            var now = performance.now() / 1000;
+            if (!frameIsSilent) {
+                silenceSince = 0;
+            } else if (!silenceSince) {
+                silenceSince = now;
+            }
+            var isSilent = frameIsSilent && silenceSince > 0 && (now - silenceSince) >= SILENCE_HOLDOFF;
 
             var resampled;
 
